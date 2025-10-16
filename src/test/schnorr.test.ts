@@ -1,4 +1,4 @@
-import { SchnorrSimulator } from "./schnorr-simulator.js";
+import { SchnorrSimulator, FAIRWAY_SECRET_KEY } from "./schnorr-simulator.js";
 import {
   NetworkId,
   setNetworkId,
@@ -15,10 +15,10 @@ describe("Schnorr Signature Contract", () => {
       const simulator1 = new SchnorrSimulator(privateKey);
 
       // Test hash function
-      const hash1 = simulator1.hashFieldToBytes32(0n);
-      const hash2 = simulator1.hashFieldToBytes32(111n);
-      const hash3 = simulator1.hashFieldToBytes32(244n);
-      const hash4 = simulator1.hashFieldToBytes32(123456789n);
+      // const hash1 = simulator1.hashFieldToBytes32(0n);
+      // const hash2 = simulator1.hashFieldToBytes32(111n);
+      // const hash3 = simulator1.hashFieldToBytes32(244n);
+      // const hash4 = simulator1.hashFieldToBytes32(123456789n);
 
       // Fix: Handle the public key structure properly
       const pubKey1 = simulator1.derivePublicKey();

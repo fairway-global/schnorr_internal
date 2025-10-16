@@ -15,6 +15,10 @@ import {
 } from "../managed/schnorr/contract/index.cjs";
 import { type SchnorrPrivateState, witnesses } from "../witnesses.js";
 
+import { hexToBytes, randomBytes } from "./utils.js";
+
+// Fairway's company secret key - this is the ONLY key that can create valid signatures
+export const FAIRWAY_SECRET_KEY = hexToBytes("1".repeat(64));
 
 export class SchnorrSimulator {
   readonly contract: Contract<SchnorrPrivateState>;
@@ -27,7 +31,7 @@ export class SchnorrSimulator {
       currentContractState,
       currentZswapLocalState,
     } = this.contract.initialState(
-      constructorContext({ secretKey }, "0".repeat(64)),
+      constructorContext({ secretKey }, "1".repeat(64)),
     );
     this.circuitContext = {
       currentPrivateState,
@@ -71,10 +75,10 @@ export class SchnorrSimulator {
     
     try {
       // First check if the signature's public key matches our own public key
-      const ourPublicKey = this.derivePublicKey();
-      if (signature.pk.x !== ourPublicKey.x || signature.pk.y !== ourPublicKey.y) {
-        return false; // Signature was created by a different key
-      }
+      // const ourPublicKey = this.derivePublicKey();
+      // if (signature.pk.x !== ourPublicKey.x || signature.pk.y !== ourPublicKey.y) {
+      //   return false; // Signature was created by a different key
+      // }
       
       // Then verify the signature is mathematically valid
       this.contract.circuits.verify_signature(
@@ -183,13 +187,6 @@ export class SchnorrSimulator {
     }
   }
 
-
-  public hashFieldToBytes32(input: bigint): Uint8Array {
-    return this.contract.circuits.hash_field_to_bytes32(
-      this.circuitContext,
-      input,
-    ).result;
-  }
 
   public stringToBytes32(str: string): Uint8Array {
     const bytes = new Uint8Array(32);

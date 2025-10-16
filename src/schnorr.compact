@@ -2,10 +2,6 @@ pragma language_version >= 0.12.0;
 import CompactStandardLibrary;
 
 
-circuit point_to_bytes(p: CurvePoint): Bytes<32> {
-    return persistentHash<CurvePoint>(p);
-}
-
 export struct Signature {
     pk: CurvePoint;
     R: CurvePoint;
@@ -41,12 +37,20 @@ export struct SignedCredentialSubject {
     signature: Signature;
 }
 
+export ledger fairway_pk: CurvePoint;
+witness localSigningKey(): Bytes<32>;
+
 constructor() {
+    fairway_pk = derive_pk(disclose(localSigningKey()));
 }
 
 // Hash the credential subject to a fixed-size representation
 export pure circuit subject_hash(credentialSubject: CredentialSubject): Bytes<32> {
     return persistentHash<CredentialSubject>(credentialSubject);
+}
+
+circuit point_to_bytes(p: CurvePoint): Bytes<32> {
+    return persistentHash<CurvePoint>(p);
 }
 
 // Derive public key from private key
@@ -58,9 +62,9 @@ export pure circuit derive_pk(sk_bytes: Bytes<32>): CurvePoint {
     return pk;
 }
 
-export pure circuit sign(msg: Bytes<32>, sk_bytes: Bytes<32>): Signature {
+export circuit sign(msg: Bytes<32>, sk_bytes: Bytes<32>): Signature {
     // Extract consistent 15-byte private key
-    const sk_bytes15: Bytes<15> = slice<15>(sk_bytes, 0);
+    const sk_bytes15: Bytes<15> = slice<15>(disclose(localSigningKey()), 0);
     const sk_field: Field = sk_bytes15 as Field;
 
     const pk = derive_pk(sk_bytes);
@@ -97,8 +101,9 @@ export pure circuit sign(msg: Bytes<32>, sk_bytes: Bytes<32>): Signature {
     return Signature { pk: pk, R: R, s: s };
 }
 
-export pure circuit verify_signature(msg: Bytes<32>, signature: Signature): [] {
+export circuit verify_signature(msg: Bytes<32>, signature: Signature): [] {
         const {pk, R, s} = signature;
+        assert(pk == fairway_pk, "Public key mismatch");
         // Compute challenge: c = H(R || pk || msg)
         const R_bytes: Bytes<32> = point_to_bytes(R);
         const pk_bytes: Bytes<32> = point_to_bytes(pk);
@@ -125,9 +130,4 @@ export pure circuit verify_signature(msg: Bytes<32>, signature: Signature): [] {
 
         // Enforce verification equation
         assert(lhs == rhs, "Signature verification failed");
-}
-
-export pure circuit hash_field_to_bytes32(input: Field): Bytes<32> {
-    const value_hash: Bytes<32> = persistentHash<Field>(input);
-    return value_hash;
 }
