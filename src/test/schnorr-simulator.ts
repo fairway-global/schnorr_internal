@@ -70,6 +70,13 @@ export class SchnorrSimulator {
     const messageBytes = this.stringToBytes32(message);
     
     try {
+      // First check if the signature's public key matches our own public key
+      const ourPublicKey = this.derivePublicKey();
+      if (signature.pk.x !== ourPublicKey.x || signature.pk.y !== ourPublicKey.y) {
+        return false; // Signature was created by a different key
+      }
+      
+      // Then verify the signature is mathematically valid
       this.contract.circuits.verify_signature(
         this.circuitContext,
         messageBytes,

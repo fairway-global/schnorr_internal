@@ -149,7 +149,7 @@ describe("Schnorr Signature Contract", () => {
     });
 
     
-    it.only("rejects signature with wrong public key", () => {
+    it("rejects signature with wrong public key", () => {
       const simulator1 = new SchnorrSimulator(randomBytes(32));
       const simulator2 = new SchnorrSimulator(randomBytes(32));
       const message = "Test message";
