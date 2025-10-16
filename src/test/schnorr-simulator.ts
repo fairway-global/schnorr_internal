@@ -15,32 +15,53 @@ import {
 } from "../managed/schnorr/contract/index.cjs";
 import { type SchnorrPrivateState, witnesses } from "../witnesses.js";
 
-import { hexToBytes, randomBytes } from "./utils.js";
+import { FAIRWAY_SECRET_KEY, hexToBytes, randomBytes } from "./utils.js";
 
 // Fairway's company secret key - this is the ONLY key that can create valid signatures
-export const FAIRWAY_SECRET_KEY = hexToBytes("1".repeat(64));
 
 export class SchnorrSimulator {
+  // Shared contract instance across all simulators
+  private static sharedContract: Contract<SchnorrPrivateState> | null = null;
+  private static sharedCircuitContext: CircuitContext<SchnorrPrivateState> | null = null;
+
   readonly contract: Contract<SchnorrPrivateState>;
   circuitContext: CircuitContext<SchnorrPrivateState>;
 
   constructor(secretKey: Uint8Array) {
-    this.contract = new Contract<SchnorrPrivateState>(witnesses);
-    const {
-      currentPrivateState,
-      currentContractState,
-      currentZswapLocalState,
-    } = this.contract.initialState(
-      constructorContext({ secretKey }, "1".repeat(64)),
-    );
+    // Initialize shared contract and ledger state on first instantiation
+    if (!SchnorrSimulator.sharedContract || !SchnorrSimulator.sharedCircuitContext) {
+      SchnorrSimulator.sharedContract = new Contract<SchnorrPrivateState>(witnesses);
+      
+      // Initialize with Fairway's secret key to set fairway_pk in shared ledger
+      const {
+        currentPrivateState,
+        currentContractState,
+        currentZswapLocalState,
+      } = SchnorrSimulator.sharedContract.initialState(
+        constructorContext({ localSigningKey: FAIRWAY_SECRET_KEY }, "0".repeat(64)),
+      );
+      
+      SchnorrSimulator.sharedCircuitContext = {
+        currentPrivateState,
+        currentZswapLocalState,
+        originalState: currentContractState,
+        transactionContext: new QueryContext(
+          currentContractState.data,
+          sampleContractAddress(),
+        ),
+      };
+    }
+
+    // All instances share the same contract and ledger state
+    this.contract = SchnorrSimulator.sharedContract;
+    
+    // Create instance-specific private state with this instance's signing key
+    const localSigningKey = secretKey;
     this.circuitContext = {
-      currentPrivateState,
-      currentZswapLocalState,
-      originalState: currentContractState,
-      transactionContext: new QueryContext(
-        currentContractState.data,
-        sampleContractAddress(),
-      ),
+      currentPrivateState: { localSigningKey },
+      currentZswapLocalState: SchnorrSimulator.sharedCircuitContext.currentZswapLocalState,
+      originalState: SchnorrSimulator.sharedCircuitContext.originalState,
+      transactionContext: SchnorrSimulator.sharedCircuitContext.transactionContext,
     };
   }
 
@@ -57,7 +78,7 @@ export class SchnorrSimulator {
   public derivePublicKey(): { x: bigint; y: bigint } {
     return this.contract.circuits.derive_pk(
       this.circuitContext,
-      this.getPrivateState().secretKey,
+      this.getPrivateState().localSigningKey,
     ).result;
   }
 
@@ -66,7 +87,6 @@ export class SchnorrSimulator {
     return this.contract.circuits.sign(
       this.circuitContext,
       messageBytes,
-      this.getPrivateState().secretKey,
     ).result;
   }
 
@@ -74,13 +94,7 @@ export class SchnorrSimulator {
     const messageBytes = this.stringToBytes32(message);
     
     try {
-      // First check if the signature's public key matches our own public key
-      // const ourPublicKey = this.derivePublicKey();
-      // if (signature.pk.x !== ourPublicKey.x || signature.pk.y !== ourPublicKey.y) {
-      //   return false; // Signature was created by a different key
-      // }
-      
-      // Then verify the signature is mathematically valid
+  
       this.contract.circuits.verify_signature(
         this.circuitContext,
         messageBytes,
@@ -120,8 +134,7 @@ export class SchnorrSimulator {
     const credentialHash = this.hashCredentialSubject(credential);
     const signature = this.contract.circuits.sign(
       this.circuitContext,
-      credentialHash,
-      this.getPrivateState().secretKey,
+      credentialHash
     ).result;
     
     return {

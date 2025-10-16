@@ -1,10 +1,10 @@
-import { SchnorrSimulator, FAIRWAY_SECRET_KEY } from "./schnorr-simulator.js";
+import { SchnorrSimulator } from "./schnorr-simulator.js";
 import {
   NetworkId,
   setNetworkId,
 } from "@midnight-ntwrk/midnight-js-network-id";
 import { describe, it, expect, beforeAll } from "vitest";
-import { randomBytes } from "./utils.js";
+import { randomBytes, FAIRWAY_SECRET_KEY } from "./utils.js";
 
 setNetworkId(NetworkId.Undeployed);
 
@@ -26,14 +26,14 @@ describe("Schnorr Signature Contract", () => {
       console.log("Public Key y:", pubKey1.y.toString(16));
       
       const simulator2 = new SchnorrSimulator(privateKey);
-      const secretKey2 = simulator2.getPrivateState().secretKey;
+      const secretKey2 = simulator2.getPrivateState().localSigningKey;
       console.log("Private Key:", Buffer.from(secretKey2).toString('hex'));
       
       const pubKey2 = simulator2.derivePublicKey();
       console.log("Public Key x:", pubKey2.x.toString(16));
       console.log("Public Key y:", pubKey2.y.toString(16));
       
-      expect(simulator1.getPrivateState().secretKey).toEqual(simulator2.getPrivateState().secretKey);
+      expect(simulator1.getPrivateState().localSigningKey).toEqual(simulator2.getPrivateState().localSigningKey);
       expect(simulator1.derivePublicKey()).toEqual(simulator2.derivePublicKey());
     });
 
@@ -138,7 +138,7 @@ describe("Schnorr Signature Contract", () => {
 
   describe("Signature Verification", () => {
     it("verifies valid signature", () => {
-      const simulator = new SchnorrSimulator(randomBytes(32));
+      const simulator = new SchnorrSimulator(FAIRWAY_SECRET_KEY);
       const message = "Verify this message";
       
       const signature = simulator.signMessage(message);
@@ -164,7 +164,7 @@ describe("Schnorr Signature Contract", () => {
     });
 
     it("verifies multiple messages from same signer", () => {
-      const simulator = new SchnorrSimulator(randomBytes(32));
+      const simulator = new SchnorrSimulator(FAIRWAY_SECRET_KEY);
       const messages = [
         "First message",
         "Second message", 
@@ -249,7 +249,7 @@ describe("Schnorr Signature Contract", () => {
     });
 
     it("signs and verifies credential subject", () => {
-      const simulator = new SchnorrSimulator(randomBytes(32));
+      const simulator = new SchnorrSimulator(FAIRWAY_SECRET_KEY);
       
       const credential = simulator.createCredentialSubject(
         "user-789",
@@ -298,7 +298,7 @@ describe("Schnorr Signature Contract", () => {
 
   describe("Performance and Edge Cases", () => {
     it("handles rapid consecutive signatures", () => {
-      const simulator = new SchnorrSimulator(randomBytes(32));
+      const simulator = new SchnorrSimulator(FAIRWAY_SECRET_KEY);
       const messageCount = 10;
       
       const signatures = [];
@@ -328,14 +328,23 @@ describe("Schnorr Signature Contract", () => {
     });
 
     it("handles maximum value private key", () => {
+      // Test that only Fairway key can create valid signatures
+      // Non-Fairway keys should fail verification
       const maxKey = new Uint8Array(32);
       maxKey.fill(0xFF); // All 255s
       
-      const simulator = new SchnorrSimulator(maxKey);
-      const signature = simulator.signMessage("Test with max key");
-      const isValid = simulator.verifySignature("Test with max key", signature);
+      const nonFairwaySimulator = new SchnorrSimulator(maxKey);
+      const signature = nonFairwaySimulator.signMessage("Test with max key");
+      const isValid = nonFairwaySimulator.verifySignature("Test with max key", signature);
       
-      expect(isValid).toBe(true);
+      // Should fail because signature pk won't match fairway_pk
+      expect(isValid).toBe(false);
+      
+      // Now test with Fairway's key - should succeed
+      const fairwaySimulator = new SchnorrSimulator(FAIRWAY_SECRET_KEY);
+      const fairwaySignature = fairwaySimulator.signMessage("Test with Fairway key");
+      const fairwayValid = fairwaySimulator.verifySignature("Test with Fairway key", fairwaySignature);
+      expect(fairwayValid).toBe(true);
     });
 
     it("maintains signature determinism", () => {
@@ -355,12 +364,11 @@ describe("Schnorr Signature Contract", () => {
   });
 
   describe("Integration Scenarios", () => {
-    it("simulates digital identity workflow", () => {
-      // Step 1: Issuer creates and signs credential
-      const issuerKey = randomBytes(32);
-      const issuer = new SchnorrSimulator(issuerKey);
+    it("simulates digital identity workflow with Fairway authority", () => {
+      // In this system, only Fairway can issue valid credentials
+      const fairwayIssuer = new SchnorrSimulator(FAIRWAY_SECRET_KEY);
       
-      const credential = issuer.createCredentialSubject(
+      const credential = fairwayIssuer.createCredentialSubject(
         "user-integration-001",
         "Integration",
         "Tester",
@@ -368,61 +376,24 @@ describe("Schnorr Signature Contract", () => {
         BigInt(Date.now() - (22 * 365 * 24 * 60 * 60 * 1000))
       );
       
-      const signedCredential = issuer.signCredentialSubject(credential);
+      const signedCredential = fairwayIssuer.signCredentialSubject(credential);
       
-      // Step 2: Verifier (different entity) verifies using issuer's public key
-      const verifierKey = randomBytes(32);
-      const verifier = new SchnorrSimulator(verifierKey);
+      // Any verifier can verify Fairway's signature
+      const verifier = new SchnorrSimulator(randomBytes(32));
+      const isCredentialValid = verifier.verifySignedCredential(signedCredential);
       
-      // Get issuer's public key for verification
-      const issuerPublicKey = issuer.derivePublicKey();
-      
-      // Verifier checks credential against issuer's public key
-      const isCredentialValid = verifier.verifySignedCredentialWithPublicKey(
-        signedCredential, 
-        issuerPublicKey
-      );
       expect(isCredentialValid).toBe(true);
-      
-      // Step 3: User (third entity) signs their own message
-      const userKey = randomBytes(32);
-      const user = new SchnorrSimulator(userKey);
-      
-      const userMessage = "I agree to the terms of service";
-      const userSignature = user.signMessage(userMessage);
-      
-      // Step 4: Verifier checks user's message against user's public key
-      const userPublicKey = user.derivePublicKey();
-      const isMessageValid = verifier.verifySignatureWithPublicKey(
-        userMessage, 
-        userSignature, 
-        userPublicKey
-      );
-      
-      expect(isMessageValid).toBe(true);
-      
-      // Step 5: Demonstrate cross-verification fails
-      // Verifier tries to verify user's signature against issuer's key (should fail)
-      const crossVerification = verifier.verifySignatureWithPublicKey(
-        userMessage,
-        userSignature,
-        issuerPublicKey
-      );
-      expect(crossVerification).toBe(false);
+      console.log("✅ Fairway credential verified successfully");
     });
 
     it("handles digital identity issuance and verification workflow", () => {
-      // Real-world scenario: University issuing a degree credential
-      const issuerPrivateKey = randomBytes(32);
-      const studentPrivateKey = randomBytes(32);
-      const verifierPrivateKey = randomBytes(32);
-      
-      const issuer = new SchnorrSimulator(issuerPrivateKey);
-      const student = new SchnorrSimulator(studentPrivateKey);
-      const verifier = new SchnorrSimulator(verifierPrivateKey);
+      // Real-world scenario: Fairway issuing a verified credential
+      const fairwayIssuer = new SchnorrSimulator(FAIRWAY_SECRET_KEY);
+      const student = new SchnorrSimulator(randomBytes(32));
+      const verifier = new SchnorrSimulator(randomBytes(32));
       
       // Step 1: Create a realistic credential
-      const credentialSubject = issuer.createCredentialSubject(
+      const credentialSubject = fairwayIssuer.createCredentialSubject(
         "student123",
         "John",
         "Doe", 
@@ -430,62 +401,36 @@ describe("Schnorr Signature Contract", () => {
         1700000000n // Birth timestamp
       );
       
-      // Step 2: Issuer signs the credential
-      const issuedCredential = issuer.signCredentialSubject(credentialSubject);
-      console.log("✅ Credential issued by university");
+      // Step 2: Fairway signs the credential
+      const issuedCredential = fairwayIssuer.signCredentialSubject(credentialSubject);
+      console.log("✅ Credential issued by Fairway");
       
-      // Step 3: Student verifies they can verify the credential with issuer's public key
-      const studentVerification = student.verifySignedCredentialWithPublicKey(
-        issuedCredential,
-        issuer.derivePublicKey()
-      );
+      // Step 3: Student verifies the credential
+      const studentVerification = student.verifySignedCredential(issuedCredential);
       expect(studentVerification).toBe(true);
       console.log("✅ Student verified credential authenticity");
       
       // Step 4: Employer (verifier) independently verifies the credential
-      const employerVerification = verifier.verifySignedCredentialWithPublicKey(
-        issuedCredential,
-        issuer.derivePublicKey()
-      );
+      const employerVerification = verifier.verifySignedCredential(issuedCredential);
       expect(employerVerification).toBe(true);
       console.log("✅ Employer verified credential authenticity");
       
-      // Step 5: Test failure cases - tampered credential should fail
-      const tamperedCredentialSubject = issuer.createCredentialSubject(
-        "student123",
-        "Fake", // Tampered first name!
-        "Doe",
-        "ID12345",
-        1700000000n
-      );
-      const tamperedCredential = issuer.signCredentialSubject(tamperedCredentialSubject);
+      // Step 5: Test failure case - tampered credential should fail
+      const tamperedCredential = {
+        ...issuedCredential,
+        subject: {
+          ...issuedCredential.subject,
+          first_name: verifier.stringToBytes32("Fake")
+        }
+      };
       
-      const tamperedVerification = verifier.verifySignedCredentialWithPublicKey(
-        tamperedCredential,
-        issuer.derivePublicKey()
-      );
-      // This should pass since it's a valid signature for the tampered data
-      expect(tamperedVerification).toBe(true);
-      
-      // But if we try to verify the original credential with the tampered signature, it should fail
-      const mixedVerification = verifier.verifySignedCredentialWithPublicKey(
-        issuedCredential, // Original credential
-        student.derivePublicKey() // Wrong key
-      );
-      expect(mixedVerification).toBe(false);
-      console.log("✅ Mixed credential verification correctly rejected");
-      
-      // Step 6: Test failure case - wrong issuer public key should fail
-      const wrongIssuerVerification = verifier.verifySignedCredentialWithPublicKey(
-        issuedCredential,
-        student.derivePublicKey() // Wrong issuer key!
-      );
-      expect(wrongIssuerVerification).toBe(false);
-      console.log("✅ Wrong issuer key correctly rejected");
+      const tamperedVerification = verifier.verifySignedCredential(tamperedCredential);
+      expect(tamperedVerification).toBe(false);
+      console.log("✅ Tampered credential correctly rejected");
     });
 
-    it("handles multi-party contract signing scenario", () => {
-      // Real-world scenario: Multi-party business agreement
+    it("handles multi-party contract signing scenario with Fairway authority", () => {
+      // Real-world scenario: Fairway certifies agreements
       const parties = [
         { name: "Alice Corp", key: randomBytes(32), role: "Contractor" },
         { name: "Bob Industries", key: randomBytes(32), role: "Client" },
@@ -502,81 +447,35 @@ describe("Schnorr Signature Contract", () => {
         All parties agree to these terms and conditions.
       `.trim();
       
-      interface PartySignature {
-        party: string;
-        role: string;
-        signature: any;
-        publicKey: { x: bigint; y: bigint };
-        timestamp: string;
-      }
+      // Fairway signs the contract agreement
+      const fairway = new SchnorrSimulator(FAIRWAY_SECRET_KEY);
+      const contractSignature = fairway.signMessage(contractTerms);
       
-      const signatures: PartySignature[] = [];
-      
-      // Each party signs the contract
-      parties.forEach(party => {
-        const simulator = new SchnorrSimulator(party.key);
-        const signature = simulator.signMessage(contractTerms);
-        signatures.push({
-          party: party.name,
-          role: party.role,
-          signature,
-          publicKey: simulator.derivePublicKey(),
-          timestamp: new Date().toISOString()
-        });
-        console.log(`✅ ${party.name} (${party.role}) signed the contract`);
-      });
+      console.log("✅ Fairway certified the contract");
       
       // Independent verification by external auditor
-      const auditorKey = randomBytes(32);
-      const auditor = new SchnorrSimulator(auditorKey);
+      const auditor = new SchnorrSimulator(randomBytes(32));
+      const isValid = auditor.verifySignature(contractTerms, contractSignature);
       
-      // Verify all signatures are valid
-      signatures.forEach(signedParty => {
-        const isValid = auditor.verifySignatureWithPublicKey(
-          contractTerms,
-          signedParty.signature,
-          signedParty.publicKey
-        );
-        expect(isValid).toBe(true);
-        console.log(`✅ Auditor verified signature from ${signedParty.party}`);
-      });
+      expect(isValid).toBe(true);
+      console.log("✅ Auditor verified Fairway's certification");
       
       // Test failure case - modified contract should fail verification
-      const modifiedContract = contractTerms.replace("$100,000", "$200,000");
-      const modifiedVerification = auditor.verifySignatureWithPublicKey(
-        modifiedContract,
-        signatures[0].signature,
-        signatures[0].publicKey
-      );
-      // Note: This test demonstrates that message truncation in stringToBytes32
-      // might cause similar contracts to have same hash. In production, use full hashing.
-      console.log(`Original contract length: ${contractTerms.length}`);
-      console.log(`Modified contract length: ${modifiedContract.length}`);
-      console.log(`Modified verification result: ${modifiedVerification}`);
-      
-      // Instead, let's test with a clearly different message
       const completelyDifferentContract = "This is a completely different contract with different terms";
-      const differentVerification = auditor.verifySignatureWithPublicKey(
+      const differentVerification = auditor.verifySignature(
         completelyDifferentContract,
-        signatures[0].signature,
-        signatures[0].publicKey
+        contractSignature
       );
       expect(differentVerification).toBe(false);
-      console.log("✅ Completely different contract correctly rejected");
-      
-      expect(signatures.length).toBe(3);
-      console.log("✅ Multi-party contract signing completed successfully");
+      console.log("✅ Modified contract correctly rejected");
+      console.log("✅ Contract certification workflow completed successfully");
     });
 
     it("handles credential revocation and reissuance workflow", () => {
-      // Real-world scenario: License renewal and revocation
-      const authorityKey = randomBytes(32);
-      const citizenKey = randomBytes(32);
-      const verifierKey = randomBytes(32);
-      
-      const authority = new SchnorrSimulator(authorityKey);
-      const citizen = new SchnorrSimulator(citizenKey);
-      const verifier = new SchnorrSimulator(verifierKey);
+      // Real-world scenario: Fairway issues and renews licenses
+      const authority = new SchnorrSimulator(FAIRWAY_SECRET_KEY);
+      const citizen = new SchnorrSimulator(randomBytes(32));
+      const verifier = new SchnorrSimulator(randomBytes(32));
       
       // Initial license issuance
       const originalLicense = authority.createCredentialSubject(
@@ -591,10 +490,7 @@ describe("Schnorr Signature Contract", () => {
       console.log("✅ Original license issued");
       
       // Verify original license is valid
-      const originalVerification = verifier.verifySignedCredentialWithPublicKey(
-        originalCredential,
-        authority.derivePublicKey()
-      );
+      const originalVerification = verifier.verifySignedCredential(originalCredential);
       expect(originalVerification).toBe(true);
       console.log("✅ Original license verified as valid");
       
@@ -611,10 +507,7 @@ describe("Schnorr Signature Contract", () => {
       console.log("✅ License renewed with new terms");
       
       // Verify renewed license is valid
-      const renewedVerification = verifier.verifySignedCredentialWithPublicKey(
-        renewedCredential,
-        authority.derivePublicKey()
-      );
+      const renewedVerification = verifier.verifySignedCredential(renewedCredential);
       expect(renewedVerification).toBe(true);
       console.log("✅ Renewed license verified as valid");
       
@@ -622,12 +515,9 @@ describe("Schnorr Signature Contract", () => {
       expect(originalVerification).toBe(true);
       expect(renewedVerification).toBe(true);
       
-      // Different credentials should not cross-verify
-      const crossVerification = verifier.verifySignedCredentialWithPublicKey(
-        originalCredential,
-        authority.derivePublicKey()
-      );
-      expect(crossVerification).toBe(true); // This should actually pass since it's the same authority
+      // Different credentials are both valid since they're signed by Fairway
+      const crossVerification = verifier.verifySignedCredential(originalCredential);
+      expect(crossVerification).toBe(true);
       console.log("✅ Cross-verification handled correctly");
     });
   });

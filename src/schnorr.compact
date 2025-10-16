@@ -59,7 +59,7 @@ export pure circuit derive_pk(sk_bytes: Bytes<32>): CurvePoint {
     assert(sk_bytes != default<Bytes<32>>, "Private key cannot be zero");
     const sk_bytes15: Bytes<15> = slice<15>(sk_bytes, 0);
     const sk_field: Field = sk_bytes15 as Field;
-    
+
     const pk: CurvePoint = ecMulGenerator(sk_field);
     return pk;
 }
@@ -92,7 +92,6 @@ export circuit sign(msg: Bytes<32>): Signature {
         b2: msg
     };
 
-    const c_field_raw: Field = transientHash<Bytes96>(c_bytes);
     const c_hash: Bytes<32> = persistentHash<Bytes96>(c_bytes);
 
     const c_bytes15: Bytes<15> = slice<15>(c_hash, 0);

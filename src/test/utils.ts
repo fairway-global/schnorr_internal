@@ -14,3 +14,6 @@ export function hexToBytes(hex: string): Uint8Array {
   }
   return bytes;
 }
+
+// Shared Fairway secret key - 32 bytes of 0x11
+export const FAIRWAY_SECRET_KEY = hexToBytes("1".repeat(64));
