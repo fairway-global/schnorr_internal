@@ -35,7 +35,7 @@ describe("Schnorr Signature Contract", () => {
 
   describe("Message Signing", () => {
 
-    it.only("signs a simple message correctly", () => {
+    it("signs a simple message correctly", () => {
       const simulator = new SchnorrSimulator(randomBytes(32));
       const message = "Hello, Midnight Network!";
       
@@ -110,7 +110,7 @@ describe("Schnorr Signature Contract", () => {
       expect(signature.pk).toBeDefined();
     });
 
-    it("handles long message (truncated to 32 bytes)", () => {
+    it("handles long message ", () => {
       const simulator = new SchnorrSimulator(randomBytes(32));
       const longMessage = "This is a very long message that exceeds 32 bytes and should be truncated by the signing function";
       
@@ -123,6 +123,7 @@ describe("Schnorr Signature Contract", () => {
 
 
   describe("Signature Verification", () => {
+    
     it("verifies valid signature", () => {
       const simulator = new SchnorrSimulator(FAIRWAY_SECRET_KEY);
       const message = "Verify this message";
@@ -134,8 +135,7 @@ describe("Schnorr Signature Contract", () => {
       expect(isValid).toBe(true);
     });
 
-    
-    it("rejects signature with wrong public key", () => {
+    it("rejects signature signed with a different public key than fairway", () => {
       const simulator1 = new SchnorrSimulator(randomBytes(32));
       const simulator2 = new SchnorrSimulator(randomBytes(32));
       const message = "Test message";
@@ -145,7 +145,6 @@ describe("Schnorr Signature Contract", () => {
       const isValid = simulator2.verifySignature(message, signature1);
       console.log("Is signature valid with different public key?", isValid);
       
-      // Should return false when verifying with wrong key
       expect(isValid).toBe(false);
     });
 
@@ -159,15 +158,16 @@ describe("Schnorr Signature Contract", () => {
       
       const signatures = messages.map(msg => simulator.signMessage(msg));
       
-      // All should verify correctly
       signatures.forEach((sig, i) => {
         const isValid = simulator.verifySignature(messages[i], sig);
         expect(isValid).toBe(true);
       });
     });
+
   });
 
   describe("Credential Subject Operations", () => {
+
     it("creates and hashes credential subject", () => {
       const simulator = new SchnorrSimulator(randomBytes(32));
       
@@ -251,7 +251,7 @@ describe("Schnorr Signature Contract", () => {
     });
 
     it("rejects tampered credential", () => {
-      const simulator = new SchnorrSimulator(randomBytes(32));
+      const simulator = new SchnorrSimulator(FAIRWAY_SECRET_KEY);
       
       const credential = simulator.createCredentialSubject(
         "user-abc",
@@ -282,7 +282,9 @@ describe("Schnorr Signature Contract", () => {
     });
   });
 
+  // TODO
   describe("Performance and Edge Cases", () => {
+
     it("handles rapid consecutive signatures", () => {
       const simulator = new SchnorrSimulator(FAIRWAY_SECRET_KEY);
       const messageCount = 10;
