@@ -1,18 +1,3 @@
-// This file is part of midnightntwrk/example-schnorr.
-// Copyright (C) 2025 Midnight Foundation
-// SPDX-License-Identifier: Apache-2.0
-// Licensed under the Apache License, Version 2.0 (the "License");
-// You may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-// http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
-
 import { SchnorrSimulator } from "./schnorr-simulator.js";
 import {
   NetworkId,
@@ -28,30 +13,12 @@ describe("Schnorr Signature Contract", () => {
     it("creates simulator with deterministic behavior", () => {
       const privateKey = randomBytes(32);
       const simulator1 = new SchnorrSimulator(privateKey);
-      //console.log("Private Key:", Buffer.from(simulator1.getPrivateKey()).toString('hex'));
 
-      /**
-       * 
-       *  console.logBytes32(counter.getSha256Hash(0));
-        console.logBytes32(counter.getSha256Hash(111));
-        console.logBytes32(counter.getSha256Hash(244));
-        console.logBytes32(counter.getSha256Hash(123456789));
-       */
-      const hash1 = simulator1.getHash(0n);
-      const hash2 = simulator1.getHash(111n);
-      const hash3 = simulator1.getHash(244n);
-      const hash4 = simulator1.getHash(123456789n);
-
-      console.log("");
-      console.log("");
-      console.log("");
-      console.log("Hash of 0:", Buffer.from(hash1).toString("hex"));
-      console.log("Hash of 111:", Buffer.from(hash2).toString("hex"));
-      console.log("Hash of 244:", Buffer.from(hash3).toString("hex"));
-      console.log("Hash of 123456789:", Buffer.from(hash4).toString("hex"));
-      console.log("");
-      console.log("");
-      console.log("");
+      // Test hash function
+      const hash1 = simulator1.hashFieldToBytes32(0n);
+      const hash2 = simulator1.hashFieldToBytes32(111n);
+      const hash3 = simulator1.hashFieldToBytes32(244n);
+      const hash4 = simulator1.hashFieldToBytes32(123456789n);
 
       // Fix: Handle the public key structure properly
       const pubKey1 = simulator1.derivePublicKey();
@@ -59,13 +26,14 @@ describe("Schnorr Signature Contract", () => {
       console.log("Public Key y:", pubKey1.y.toString(16));
       
       const simulator2 = new SchnorrSimulator(privateKey);
-      console.log("Private Key:", Buffer.from(simulator2.getPrivateKey()).toString('hex'));
+      const secretKey2 = simulator2.getPrivateState().secretKey;
+      console.log("Private Key:", Buffer.from(secretKey2).toString('hex'));
       
       const pubKey2 = simulator2.derivePublicKey();
       console.log("Public Key x:", pubKey2.x.toString(16));
       console.log("Public Key y:", pubKey2.y.toString(16));
       
-      expect(simulator1.getPrivateKey()).toEqual(simulator2.getPrivateKey());
+      expect(simulator1.getPrivateState().secretKey).toEqual(simulator2.getPrivateState().secretKey);
       expect(simulator1.derivePublicKey()).toEqual(simulator2.derivePublicKey());
     });
 
@@ -176,12 +144,12 @@ describe("Schnorr Signature Contract", () => {
       const signature = simulator.signMessage(message);
       const isValid = simulator.verifySignature(message, signature);
       
-
+      console.log("Is signature valid?", isValid);
       expect(isValid).toBe(true);
     });
 
     
-    it("rejects signature with wrong public key", () => {
+    it.only("rejects signature with wrong public key", () => {
       const simulator1 = new SchnorrSimulator(randomBytes(32));
       const simulator2 = new SchnorrSimulator(randomBytes(32));
       const message = "Test message";

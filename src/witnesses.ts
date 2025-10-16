@@ -1,7 +1,5 @@
-export type PrivateState = {
-  privateState: number;
+export type SchnorrPrivateState = {
+  secretKey: Uint8Array;
 };
 
-export const witnesses = {
-  privateState: 0
-};
+export const witnesses = {};

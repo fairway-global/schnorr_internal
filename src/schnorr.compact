@@ -83,7 +83,7 @@ export pure circuit sign(msg: Bytes<32>, sk_bytes: Bytes<32>): Signature {
         b1: pk_bytes,
         b2: msg
     };
-    
+
     const c_field_raw: Field = transientHash<Bytes96>(c_bytes);
     const c_hash: Bytes<32> = persistentHash<Bytes96>(c_bytes);
 
