@@ -41,6 +41,7 @@ export ledger fairway_pk: CurvePoint;
 witness localSigningKey(): Bytes<32>;
 
 constructor() {
+    assert(disclose(localSigningKey()) != default<Bytes<32>>, "Private key cannot be zero");
     fairway_pk = derive_pk(disclose(localSigningKey()));
 }
 
@@ -55,16 +56,19 @@ circuit point_to_bytes(p: CurvePoint): Bytes<32> {
 
 // Derive public key from private key
 export pure circuit derive_pk(sk_bytes: Bytes<32>): CurvePoint {
+    assert(sk_bytes != default<Bytes<32>>, "Private key cannot be zero");
     const sk_bytes15: Bytes<15> = slice<15>(sk_bytes, 0);
     const sk_field: Field = sk_bytes15 as Field;
-    assert(sk_field != 0, "Private key cannot be zero");
+    
     const pk: CurvePoint = ecMulGenerator(sk_field);
     return pk;
 }
 
-export circuit sign(msg: Bytes<32>, sk_bytes: Bytes<32>): Signature {
+export circuit sign(msg: Bytes<32>): Signature {
     // Extract consistent 15-byte private key
-    const sk_bytes15: Bytes<15> = slice<15>(disclose(localSigningKey()), 0);
+    const sk_bytes: Bytes<32> = disclose(localSigningKey());
+    assert(sk_bytes != default<Bytes<32>>, "Private key cannot be zero");
+    const sk_bytes15: Bytes<15> = slice<15>(sk_bytes, 0);
     const sk_field: Field = sk_bytes15 as Field;
 
     const pk = derive_pk(sk_bytes);

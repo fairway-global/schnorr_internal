@@ -2,11 +2,11 @@ import { Ledger } from "./managed/schnorr/contract/index.cjs";
 import { WitnessContext } from "@midnight-ntwrk/compact-runtime";
 
 export type SchnorrPrivateState = {
-  readonly secretKey: Uint8Array;
+  readonly localSigningKey: Uint8Array;
 };
 
-export const createSchnorrPrivateState = (secretKey: Uint8Array) => ({
-  secretKey,
+export const createSchnorrPrivateState = (localSigningKey: Uint8Array) => ({
+  localSigningKey,
 });
 
 export const witnesses = {
@@ -15,5 +15,5 @@ export const witnesses = {
   }: WitnessContext<Ledger, SchnorrPrivateState>): [
     SchnorrPrivateState,
     Uint8Array,
-  ] => [privateState, privateState.secretKey],
+  ] => [privateState, privateState.localSigningKey],
 };
