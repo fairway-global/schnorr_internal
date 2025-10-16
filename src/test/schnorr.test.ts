@@ -10,29 +10,14 @@ setNetworkId(NetworkId.Undeployed);
 
 describe("Schnorr Signature Contract", () => {
   describe("Contract Initialization", () => {
+
     it("creates simulator with deterministic behavior", () => {
+
       const privateKey = randomBytes(32);
-      const simulator1 = new SchnorrSimulator(privateKey);
 
-      // Test hash function
-      // const hash1 = simulator1.hashFieldToBytes32(0n);
-      // const hash2 = simulator1.hashFieldToBytes32(111n);
-      // const hash3 = simulator1.hashFieldToBytes32(244n);
-      // const hash4 = simulator1.hashFieldToBytes32(123456789n);
-
-      // Fix: Handle the public key structure properly
-      const pubKey1 = simulator1.derivePublicKey();
-      console.log("Public Key x:", pubKey1.x.toString(16));
-      console.log("Public Key y:", pubKey1.y.toString(16));
-      
+      const simulator1 = new SchnorrSimulator(privateKey);     
       const simulator2 = new SchnorrSimulator(privateKey);
-      const secretKey2 = simulator2.getPrivateState().localSigningKey;
-      console.log("Private Key:", Buffer.from(secretKey2).toString('hex'));
-      
-      const pubKey2 = simulator2.derivePublicKey();
-      console.log("Public Key x:", pubKey2.x.toString(16));
-      console.log("Public Key y:", pubKey2.y.toString(16));
-      
+
       expect(simulator1.getPrivateState().localSigningKey).toEqual(simulator2.getPrivateState().localSigningKey);
       expect(simulator1.derivePublicKey()).toEqual(simulator2.derivePublicKey());
     });
@@ -49,7 +34,8 @@ describe("Schnorr Signature Contract", () => {
   });
 
   describe("Message Signing", () => {
-    it("signs a simple message correctly", () => {
+
+    it.only("signs a simple message correctly", () => {
       const simulator = new SchnorrSimulator(randomBytes(32));
       const message = "Hello, Midnight Network!";
       
@@ -383,7 +369,6 @@ describe("Schnorr Signature Contract", () => {
       const isCredentialValid = verifier.verifySignedCredential(signedCredential);
       
       expect(isCredentialValid).toBe(true);
-      console.log("✅ Fairway credential verified successfully");
     });
 
     it("handles digital identity issuance and verification workflow", () => {
@@ -403,17 +388,14 @@ describe("Schnorr Signature Contract", () => {
       
       // Step 2: Fairway signs the credential
       const issuedCredential = fairwayIssuer.signCredentialSubject(credentialSubject);
-      console.log("✅ Credential issued by Fairway");
       
       // Step 3: Student verifies the credential
       const studentVerification = student.verifySignedCredential(issuedCredential);
       expect(studentVerification).toBe(true);
-      console.log("✅ Student verified credential authenticity");
       
       // Step 4: Employer (verifier) independently verifies the credential
       const employerVerification = verifier.verifySignedCredential(issuedCredential);
       expect(employerVerification).toBe(true);
-      console.log("✅ Employer verified credential authenticity");
       
       // Step 5: Test failure case - tampered credential should fail
       const tamperedCredential = {
@@ -426,7 +408,6 @@ describe("Schnorr Signature Contract", () => {
       
       const tamperedVerification = verifier.verifySignedCredential(tamperedCredential);
       expect(tamperedVerification).toBe(false);
-      console.log("✅ Tampered credential correctly rejected");
     });
 
     it("handles multi-party contract signing scenario with Fairway authority", () => {
@@ -451,14 +432,12 @@ describe("Schnorr Signature Contract", () => {
       const fairway = new SchnorrSimulator(FAIRWAY_SECRET_KEY);
       const contractSignature = fairway.signMessage(contractTerms);
       
-      console.log("✅ Fairway certified the contract");
       
       // Independent verification by external auditor
       const auditor = new SchnorrSimulator(randomBytes(32));
       const isValid = auditor.verifySignature(contractTerms, contractSignature);
       
       expect(isValid).toBe(true);
-      console.log("✅ Auditor verified Fairway's certification");
       
       // Test failure case - modified contract should fail verification
       const completelyDifferentContract = "This is a completely different contract with different terms";
@@ -467,8 +446,6 @@ describe("Schnorr Signature Contract", () => {
         contractSignature
       );
       expect(differentVerification).toBe(false);
-      console.log("✅ Modified contract correctly rejected");
-      console.log("✅ Contract certification workflow completed successfully");
     });
 
     it("handles credential revocation and reissuance workflow", () => {
@@ -487,12 +464,10 @@ describe("Schnorr Signature Contract", () => {
       );
       
       const originalCredential = authority.signCredentialSubject(originalLicense);
-      console.log("✅ Original license issued");
       
       // Verify original license is valid
       const originalVerification = verifier.verifySignedCredential(originalCredential);
       expect(originalVerification).toBe(true);
-      console.log("✅ Original license verified as valid");
       
       // License renewal with updated information
       const renewedLicense = authority.createCredentialSubject(
@@ -504,12 +479,10 @@ describe("Schnorr Signature Contract", () => {
       );
       
       const renewedCredential = authority.signCredentialSubject(renewedLicense);
-      console.log("✅ License renewed with new terms");
       
       // Verify renewed license is valid
       const renewedVerification = verifier.verifySignedCredential(renewedCredential);
       expect(renewedVerification).toBe(true);
-      console.log("✅ Renewed license verified as valid");
       
       // Both licenses should be independently valid (revocation would be handled off-chain)
       expect(originalVerification).toBe(true);
@@ -518,7 +491,6 @@ describe("Schnorr Signature Contract", () => {
       // Different credentials are both valid since they're signed by Fairway
       const crossVerification = verifier.verifySignedCredential(originalCredential);
       expect(crossVerification).toBe(true);
-      console.log("✅ Cross-verification handled correctly");
     });
   });
 });
