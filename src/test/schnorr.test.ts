@@ -40,11 +40,11 @@ describe("Schnorr Signature Contract", () => {
       const message = "Hello, Midnight Network!";
       
       const signature = simulator.signMessage(message);
-      console.log("Signature:", {
-        pk: { x: signature.pk.x.toString(16), y: signature.pk.y.toString(16) },
-        R: { x: signature.R.x.toString(16), y: signature.R.y.toString(16) },
-        s: signature.s.toString(16)
-      });
+      // console.log("Signature:", {
+      //   pk: { x: signature.pk.x.toString(16), y: signature.pk.y.toString(16) },
+      //   R: { x: signature.R.x.toString(16), y: signature.R.y.toString(16) },
+      //   s: signature.s.toString(16)
+      // });
       expect(signature).toBeDefined();
       expect(signature.pk).toBeDefined();
       expect(signature.R).toBeDefined();
@@ -57,18 +57,18 @@ describe("Schnorr Signature Contract", () => {
       const message2 = "Second message";
       
       const signature1 = simulator.signMessage(message1);
-      console.log("Signature 1:", {
-        pk: { x: signature1.pk.x.toString(16), y: signature1.pk.y.toString(16) },
-        R: { x: signature1.R.x.toString(16), y: signature1.R.y.toString(16) },
-        s: signature1.s.toString(16)
-      });
+      // console.log("Signature 1:", {
+      //   pk: { x: signature1.pk.x.toString(16), y: signature1.pk.y.toString(16) },
+      //   R: { x: signature1.R.x.toString(16), y: signature1.R.y.toString(16) },
+      //   s: signature1.s.toString(16)
+      // });
       const signature2 = simulator.signMessage(message2);
 
-      console.log("Signature 2:", {
-        pk: { x: signature2.pk.x.toString(16), y: signature2.pk.y.toString(16) },
-        R: { x: signature2.R.x.toString(16), y: signature2.R.y.toString(16) },
-        s: signature2.s.toString(16)
-      });
+      // console.log("Signature 2:", {
+      //   pk: { x: signature2.pk.x.toString(16), y: signature2.pk.y.toString(16) },
+      //   R: { x: signature2.R.x.toString(16), y: signature2.R.y.toString(16) },
+      //   s: signature2.s.toString(16)
+      // });
       
       expect(signature1.s).not.toEqual(signature2.s);
       expect(signature1.R).not.toEqual(signature2.R);
@@ -83,17 +83,17 @@ describe("Schnorr Signature Contract", () => {
       const simulator2 = new SchnorrSimulator(randomBytes(32));
       
       const signature1 = simulator1.signMessage(message);
-      console.log("Signature 1:", {
-        pk: { x: signature1.pk.x.toString(16), y: signature1.pk.y.toString(16) },
-        R: { x: signature1.R.x.toString(16), y: signature1.R.y.toString(16) },
-        s: signature1.s.toString(16)
-      });
+      // console.log("Signature 1:", {
+      //   pk: { x: signature1.pk.x.toString(16), y: signature1.pk.y.toString(16) },
+      //   R: { x: signature1.R.x.toString(16), y: signature1.R.y.toString(16) },
+      //   s: signature1.s.toString(16)
+      // });
       const signature2 = simulator2.signMessage(message);
-      console.log("Signature 2:", {
-        pk: { x: signature2.pk.x.toString(16), y: signature2.pk.y.toString(16) },
-        R: { x: signature2.R.x.toString(16), y: signature2.R.y.toString(16) },
-        s: signature2.s.toString(16)
-      });
+      // console.log("Signature 2:", {
+      //   pk: { x: signature2.pk.x.toString(16), y: signature2.pk.y.toString(16) },
+      //   R: { x: signature2.R.x.toString(16), y: signature2.R.y.toString(16) },
+      //   s: signature2.s.toString(16)
+      // });
       
       expect(signature1.pk).not.toEqual(signature2.pk);
       expect(signature1.s).not.toEqual(signature2.s);
@@ -131,7 +131,7 @@ describe("Schnorr Signature Contract", () => {
       const signature = simulator.signMessage(message);
       const isValid = simulator.verifySignature(message, signature);
       
-      console.log("Is signature valid?", isValid);
+      //console.log("Is signature valid?", isValid);
       expect(isValid).toBe(true);
     });
 
@@ -143,7 +143,6 @@ describe("Schnorr Signature Contract", () => {
       const signature1 = simulator1.signMessage(message);
       
       const isValid = simulator2.verifySignature(message, signature1);
-      console.log("Is signature valid with different public key?", isValid);
       
       expect(isValid).toBe(false);
     });
@@ -272,10 +271,10 @@ describe("Schnorr Signature Contract", () => {
         }
       };
 
-      console.log("Tampered Credential:", tamperedCredential);
-      console.log("Original Credential:", signedCredential);
-      console.log("Verifying original credential:", simulator.verifySignedCredential(signedCredential));
-      console.log("Verifying tampered credential:", simulator.verifySignedCredential(tamperedCredential));
+      // console.log("Tampered Credential:", tamperedCredential);
+      // console.log("Original Credential:", signedCredential);
+      // console.log("Verifying original credential:", simulator.verifySignedCredential(signedCredential));
+      // console.log("Verifying tampered credential:", simulator.verifySignedCredential(tamperedCredential));
 
       const isValid = simulator.verifySignedCredential(tamperedCredential);
       expect(isValid).toBe(false);
