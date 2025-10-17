@@ -34,21 +34,45 @@ describe("Schnorr Signature Contract", () => {
   });
 
   describe("Message Signing", () => {
-
+    
     it("signs a simple message correctly", () => {
       const simulator = new SchnorrSimulator(randomBytes(32));
       const message = "Hello, Midnight Network!";
       
       const signature = simulator.signMessage(message);
-      // console.log("Signature:", {
-      //   pk: { x: signature.pk.x.toString(16), y: signature.pk.y.toString(16) },
-      //   R: { x: signature.R.x.toString(16), y: signature.R.y.toString(16) },
-      //   s: signature.s.toString(16)
-      // });
+      const signature1 = simulator.signMessage(message);
+      const signature2 = simulator.signMessage(message);
+      console.log("Signature 1:", {
+        pk: { x: signature1.pk.x.toString(16), y: signature1.pk.y.toString(16) },
+        R: { x: signature1.R.x.toString(16), y: signature1.R.y.toString(16) },
+        s: signature1.s.toString(16)
+      });
+      console.log("Signature 2:", {
+        pk: { x: signature2.pk.x.toString(16), y: signature2.pk.y.toString(16) },
+        R: { x: signature2.R.x.toString(16), y: signature2.R.y.toString(16) },
+        s: signature2.s.toString(16)
+      });
+
+      // Signatures may vary due to nonce randomness, but public keys should match
+      expect(signature.pk).toEqual(signature1.pk);
+  
       expect(signature).toBeDefined();
       expect(signature.pk).toBeDefined();
       expect(signature.R).toBeDefined();
       expect(signature.s).toBeDefined();
+    });
+
+    it("different signatures for same message with different nonces", () => {
+      const simulator = new SchnorrSimulator(randomBytes(32));
+      const message = "Test message for different nonces";
+      
+      const signature1 = simulator.signMessage(message);
+      const signature2 = simulator.signMessage(message);
+      
+      expect(signature1.s).not.toEqual(signature2.s);
+      expect(signature1.R).not.toEqual(signature2.R);
+      // Public key should be the same
+      expect(signature1.pk).toEqual(signature2.pk);
     });
 
     it("produces different signatures for different messages", () => {
