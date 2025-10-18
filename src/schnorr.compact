@@ -10,17 +10,20 @@ export struct Signature {
     nonce: Uint<64>; 
 }
 
+// Combined R, pk, and msg_hash for challenge derivation
 struct Bytes96 {
     b0: Bytes<32>;
     b1: Bytes<32>;
     b2: Bytes<32>;
 }
 
+// Combined private key and message hash for nonce derivation
 struct Bytes47 {
     b0: Bytes<15>;
     b1: Bytes<32>;
 }
 
+// Combined message and nonce for hashing
 struct Bytes40 {
     b0: Bytes<32>;
     b1: Uint<64>;
