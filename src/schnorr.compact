@@ -1,4 +1,4 @@
-pragma language_version >= 0.12.0;
+pragma language_version >= 0.16 && <= 0.18;
 import CompactStandardLibrary;
 
 
@@ -14,15 +14,10 @@ struct Bytes96 {
     b2: Bytes<32>;
 }
 
-struct Bytes64 {
-    b0: Bytes<32>;
-    b1: Bytes<32>;
-}
-
-struct Bytes79 {
+struct Bytes47 {
     b0: Bytes<15>;
     b1: Bytes<32>;
-    b3: Bytes<32>;
+
 }
 
 export struct CredentialSubject {
@@ -40,7 +35,6 @@ export struct SignedCredentialSubject {
 
 export ledger fairway_pk: CurvePoint;
 witness localSigningKey(): Bytes<32>;
-witness signingNonce(): Bytes<32>;
 
 constructor() {
     assert(disclose(localSigningKey()) != default<Bytes<32>>, "Private key cannot be zero");
@@ -75,9 +69,9 @@ export circuit sign(msg: Bytes<32>): Signature {
 
     const pk = derive_pk(sk_bytes);
 
-    // Use consistent 15-byte input for nonce generation
-    const nonce_input: Bytes79 = Bytes79 { b0: sk_bytes15, b1: msg, b3: disclose(signingNonce()) };
-    const k_hash: Bytes<32> = persistentHash<Bytes79>(nonce_input);
+    // Use consistent 15-byte input for nonce generation RFC 6979 style
+    const nonce_input: Bytes47 = Bytes47 { b0: sk_bytes15, b1: msg };
+    const k_hash: Bytes<32> = persistentHash<Bytes47>(nonce_input);
     const k_bytes15: Bytes<15> = slice<15>(k_hash, 0);
     const k_field: Field = k_bytes15 as Field;
     assert(k_field != 0, "Nonce cannot be zero");

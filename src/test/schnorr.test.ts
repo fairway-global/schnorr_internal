@@ -62,15 +62,15 @@ describe("Schnorr Signature Contract", () => {
       expect(signature.s).toBeDefined();
     });
 
-    it("different signatures for same message with different nonces", () => {
+    it("same signatures for same message with same signer", () => {
       const simulator = new SchnorrSimulator(randomBytes(32));
       const message = "Test message for different nonces";
       
       const signature1 = simulator.signMessage(message);
       const signature2 = simulator.signMessage(message);
       
-      expect(signature1.s).not.toEqual(signature2.s);
-      expect(signature1.R).not.toEqual(signature2.R);
+      expect(signature1.s).toEqual(signature2.s);
+      expect(signature1.R).toEqual(signature2.R);
       // Public key should be the same
       expect(signature1.pk).toEqual(signature2.pk);
     });
