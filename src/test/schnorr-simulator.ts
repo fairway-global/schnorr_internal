@@ -22,14 +22,15 @@ import { FAIRWAY_SECRET_KEY, hexToBytes, randomBytes } from "./utils.js";
 export class SchnorrSimulator {
   // Shared contract instance across all simulators
   private static sharedContract: Contract<SchnorrPrivateState> | null = null;
-  private static sharedCircuitContext: CircuitContext<SchnorrPrivateState> | null = null;
+  private static sharedLedgerState: any = null;
+  private static sharedZswapState: any = null;
 
   readonly contract: Contract<SchnorrPrivateState>;
   circuitContext: CircuitContext<SchnorrPrivateState>;
 
   constructor(secretKey: Uint8Array) {
     // Initialize shared contract and ledger state on first instantiation
-    if (!SchnorrSimulator.sharedContract || !SchnorrSimulator.sharedCircuitContext) {
+    if (!SchnorrSimulator.sharedContract) {
       SchnorrSimulator.sharedContract = new Contract<SchnorrPrivateState>(witnesses);
       
       // Initialize with Fairway's secret key to set fairway_pk in shared ledger
@@ -41,27 +42,23 @@ export class SchnorrSimulator {
         constructorContext({ localSigningKey: FAIRWAY_SECRET_KEY }, "0".repeat(64)),
       );
       
-      SchnorrSimulator.sharedCircuitContext = {
-        currentPrivateState,
-        currentZswapLocalState,
-        originalState: currentContractState,
-        transactionContext: new QueryContext(
-          currentContractState.data,
-          sampleContractAddress(),
-        ),
-      };
+      SchnorrSimulator.sharedLedgerState = currentContractState;
+      SchnorrSimulator.sharedZswapState = currentZswapLocalState;
     }
 
-    // All instances share the same contract and ledger state
+    // All instances share the same contract
     this.contract = SchnorrSimulator.sharedContract;
     
-    // Create instance-specific private state with this instance's signing key
+    // Create instance-specific context with shared ledger state
     const localSigningKey = secretKey;
     this.circuitContext = {
       currentPrivateState: { localSigningKey },
-      currentZswapLocalState: SchnorrSimulator.sharedCircuitContext.currentZswapLocalState,
-      originalState: SchnorrSimulator.sharedCircuitContext.originalState,
-      transactionContext: SchnorrSimulator.sharedCircuitContext.transactionContext,
+      currentZswapLocalState: SchnorrSimulator.sharedZswapState,
+      originalState: SchnorrSimulator.sharedLedgerState,
+      transactionContext: new QueryContext(
+        SchnorrSimulator.sharedLedgerState.data,
+        sampleContractAddress(),
+      ),
     };
   }
 
@@ -84,24 +81,41 @@ export class SchnorrSimulator {
 
   public signMessage(message: string): Signature {
     const messageBytes = this.stringToBytes32(message);
-    return this.contract.circuits.sign(
+    const result = this.contract.circuits.sign(
       this.circuitContext,
       messageBytes,
-    ).result;
+    );
+    
+    // Update shared ledger state with new state from circuit execution
+    SchnorrSimulator.sharedLedgerState = result.context.originalState;
+    SchnorrSimulator.sharedZswapState = result.context.currentZswapLocalState;
+    
+    // Update this instance's context to use the new shared state
+    this.circuitContext = result.context;
+    
+    return result.result;
   }
 
   public verifySignature(message: string, signature: Signature): boolean {
     const messageBytes = this.stringToBytes32(message);
     
     try {
-  
-      this.contract.circuits.verify_signature(
+      const result = this.contract.circuits.verify_signature(
         this.circuitContext,
         messageBytes,
         signature,
       );
+      
+      // Update shared ledger state with new state from circuit execution
+      SchnorrSimulator.sharedLedgerState = result.context.originalState;
+      SchnorrSimulator.sharedZswapState = result.context.currentZswapLocalState;
+      
+      // Update this instance's context to use the new shared state
+      this.circuitContext = result.context;
+      
       return true;
     } catch (error) {
+      console.error("Verification error:", error);
       return false;
     }
   }
@@ -132,27 +146,49 @@ export class SchnorrSimulator {
 
   public signCredentialSubject(credential: CredentialSubject): SignedCredentialSubject {
     const credentialHash = this.hashCredentialSubject(credential);
-    const signature = this.contract.circuits.sign(
+    
+    // Use signMessage to get proper state updates
+    const signature = this.signMessage(Buffer.from(credentialHash).toString('hex').slice(0, 64).padEnd(64, '0'));
+    
+    // Actually, let's call the circuit directly but update state properly
+    const result = this.contract.circuits.sign(
       this.circuitContext,
       credentialHash
-    ).result;
+    );
+    
+    // Update shared ledger state
+    SchnorrSimulator.sharedLedgerState = result.context.originalState;
+    SchnorrSimulator.sharedZswapState = result.context.currentZswapLocalState;
+    
+    // Update this instance's context
+    this.circuitContext = result.context;
     
     return {
       subject: credential,
-      signature,
+      signature: result.result,
+      nonce: result.result.nonce,
     };
   }
 
   public verifySignedCredential(signedCredential: SignedCredentialSubject): boolean {
     try {
       const credentialHash = this.hashCredentialSubject(signedCredential.subject);
-      this.contract.circuits.verify_signature(
+      const result = this.contract.circuits.verify_signature(
         this.circuitContext,
         credentialHash,
         signedCredential.signature,
       );
+      
+      // Update shared ledger state with new state from circuit execution
+      SchnorrSimulator.sharedLedgerState = result.context.originalState;
+      SchnorrSimulator.sharedZswapState = result.context.currentZswapLocalState;
+      
+      // Update this instance's context to use the new shared state
+      this.circuitContext = result.context;
+      
       return true;
     } catch (error) {
+      console.error("Verification error:", error);
       return false;
     }
   }

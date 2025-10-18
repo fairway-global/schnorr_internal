@@ -3,10 +3,21 @@ import {
   NetworkId,
   setNetworkId,
 } from "@midnight-ntwrk/midnight-js-network-id";
-import { describe, it, expect, beforeAll } from "vitest";
+import { describe, it, expect, beforeAll, beforeEach, afterEach } from "vitest";
 import { randomBytes, FAIRWAY_SECRET_KEY } from "./utils.js";
 
 setNetworkId(NetworkId.Undeployed);
+
+// Helper to suppress expected error messages in tests
+const suppressConsoleErrors = () => {
+  const originalConsoleError = console.error;
+  beforeEach(() => {
+    console.error = () => {}; // Suppress console.error during tests
+  });
+  afterEach(() => {
+    console.error = originalConsoleError; // Restore after tests
+  });
+};
 
 describe("Schnorr Signature Contract", () => {
   describe("Contract Initialization", () => {
@@ -42,16 +53,16 @@ describe("Schnorr Signature Contract", () => {
       const signature = simulator.signMessage(message);
       const signature1 = simulator.signMessage(message);
       const signature2 = simulator.signMessage(message);
-      console.log("Signature 1:", {
-        pk: { x: signature1.pk.x.toString(16), y: signature1.pk.y.toString(16) },
-        R: { x: signature1.R.x.toString(16), y: signature1.R.y.toString(16) },
-        s: signature1.s.toString(16)
-      });
-      console.log("Signature 2:", {
-        pk: { x: signature2.pk.x.toString(16), y: signature2.pk.y.toString(16) },
-        R: { x: signature2.R.x.toString(16), y: signature2.R.y.toString(16) },
-        s: signature2.s.toString(16)
-      });
+      // console.log("Signature 1:", {
+      //   pk: { x: signature1.pk.x.toString(16), y: signature1.pk.y.toString(16) },
+      //   R: { x: signature1.R.x.toString(16), y: signature1.R.y.toString(16) },
+      //   s: signature1.s.toString(16)
+      // });
+      // console.log("Signature 2:", {
+      //   pk: { x: signature2.pk.x.toString(16), y: signature2.pk.y.toString(16) },
+      //   R: { x: signature2.R.x.toString(16), y: signature2.R.y.toString(16) },
+      //   s: signature2.s.toString(16)
+      // });
 
       // Signatures may vary due to nonce randomness, but public keys should match
       expect(signature.pk).toEqual(signature1.pk);
@@ -62,15 +73,17 @@ describe("Schnorr Signature Contract", () => {
       expect(signature.s).toBeDefined();
     });
 
-    it("same signatures for same message with same signer", () => {
+    it("different signatures for same message with same signer (different nonces)", () => {
       const simulator = new SchnorrSimulator(randomBytes(32));
       const message = "Test message for different nonces";
       
       const signature1 = simulator.signMessage(message);
       const signature2 = simulator.signMessage(message);
       
-      expect(signature1.s).toEqual(signature2.s);
-      expect(signature1.R).toEqual(signature2.R);
+      // Different nonces mean different signatures
+      expect(signature1.s).not.toEqual(signature2.s);
+      expect(signature1.R).not.toEqual(signature2.R);
+      expect(signature1.nonce).not.toBe(signature2.nonce);
       // Public key should be the same
       expect(signature1.pk).toEqual(signature2.pk);
     });
@@ -147,6 +160,7 @@ describe("Schnorr Signature Contract", () => {
 
 
   describe("Signature Verification", () => {
+    suppressConsoleErrors(); // Suppress expected verification errors
     
     it("verifies valid signature", () => {
       const simulator = new SchnorrSimulator(FAIRWAY_SECRET_KEY);
@@ -190,6 +204,7 @@ describe("Schnorr Signature Contract", () => {
   });
 
   describe("Credential Subject Operations", () => {
+    suppressConsoleErrors(); // Suppress expected credential verification errors
 
     it("creates and hashes credential subject", () => {
       const simulator = new SchnorrSimulator(randomBytes(32));
@@ -307,6 +322,7 @@ describe("Schnorr Signature Contract", () => {
 
   // TODO
   describe("Performance and Edge Cases", () => {
+    suppressConsoleErrors(); // Suppress expected errors for edge cases
 
     it("handles rapid consecutive signatures", () => {
       const simulator = new SchnorrSimulator(FAIRWAY_SECRET_KEY);
@@ -375,6 +391,8 @@ describe("Schnorr Signature Contract", () => {
   });
 
   describe("Integration Scenarios", () => {
+    suppressConsoleErrors(); // Suppress expected verification errors
+    
     it("simulates digital identity workflow with Fairway authority", () => {
       // In this system, only Fairway can issue valid credentials
       const fairwayIssuer = new SchnorrSimulator(FAIRWAY_SECRET_KEY);
@@ -490,10 +508,6 @@ describe("Schnorr Signature Contract", () => {
       
       const originalCredential = authority.signCredentialSubject(originalLicense);
       
-      // Verify original license is valid
-      const originalVerification = verifier.verifySignedCredential(originalCredential);
-      expect(originalVerification).toBe(true);
-      
       // License renewal with updated information
       const renewedLicense = authority.createCredentialSubject(
         "license456-renewed",
@@ -505,17 +519,227 @@ describe("Schnorr Signature Contract", () => {
       
       const renewedCredential = authority.signCredentialSubject(renewedLicense);
       
+      // Signatures should have different nonces
+      expect(originalCredential.signature.nonce).not.toBe(renewedCredential.signature.nonce);
+      
+      // Verify original license is valid
+      const originalVerification = verifier.verifySignedCredential(originalCredential);
+      expect(originalVerification).toBe(true);
+      
       // Verify renewed license is valid
       const renewedVerification = verifier.verifySignedCredential(renewedCredential);
       expect(renewedVerification).toBe(true);
       
-      // Both licenses should be independently valid (revocation would be handled off-chain)
+      // Both credentials were successfully verified
       expect(originalVerification).toBe(true);
       expect(renewedVerification).toBe(true);
       
-      // Different credentials are both valid since they're signed by Fairway
-      const crossVerification = verifier.verifySignedCredential(originalCredential);
-      expect(crossVerification).toBe(true);
+      // Replay attack prevention: trying to verify original credential again fails
+      const replayAttempt = verifier.verifySignedCredential(originalCredential);
+      expect(replayAttempt).toBe(false);
+    });
+  });
+
+  describe("Replay Attack Prevention", () => {
+    suppressConsoleErrors(); // Suppress expected replay attack errors
+    
+    it("should prevent replaying the same signature twice", () => {
+      const simulator = new SchnorrSimulator(FAIRWAY_SECRET_KEY);
+      const message = "transfer 100 tokens";
+      
+      const signature = simulator.signMessage(message);
+      
+      // First verification should succeed
+      const firstVerify = simulator.verifySignature(message, signature);
+      expect(firstVerify).toBe(true);
+      
+      // Attempting to verify the same signature again should fail (replay attack)
+      const secondVerify = simulator.verifySignature(message, signature);
+      expect(secondVerify).toBe(false);
+    });
+
+    it("should allow signing the same message multiple times with different nonces", () => {
+      const simulator = new SchnorrSimulator(FAIRWAY_SECRET_KEY);
+      const message = "transfer 100 tokens";
+      
+      // Sign the same message three times
+      const sig1 = simulator.signMessage(message);
+      const sig2 = simulator.signMessage(message);
+      const sig3 = simulator.signMessage(message);
+      
+      // Each signature should have a different nonce
+      expect(sig1.nonce).not.toBe(sig2.nonce);
+      expect(sig2.nonce).not.toBe(sig3.nonce);
+      expect(sig1.nonce).not.toBe(sig3.nonce);
+      
+      // Each signature should be different
+      expect(sig1.s).not.toBe(sig2.s);
+      expect(sig1.R).not.toEqual(sig2.R);
+      
+      // All verifications should succeed (different nonces)
+      expect(simulator.verifySignature(message, sig1)).toBe(true);
+      expect(simulator.verifySignature(message, sig2)).toBe(true);
+      expect(simulator.verifySignature(message, sig3)).toBe(true);
+      
+      // But replaying any of them should fail
+      expect(simulator.verifySignature(message, sig1)).toBe(false);
+      expect(simulator.verifySignature(message, sig2)).toBe(false);
+      expect(simulator.verifySignature(message, sig3)).toBe(false);
+    });
+
+    it("should increment nonce sequentially", () => {
+      const simulator = new SchnorrSimulator(FAIRWAY_SECRET_KEY);
+      const messages = ["msg1", "msg2", "msg3", "msg4", "msg5"];
+      const signatures = [];
+      
+      // Sign multiple messages
+      for (const msg of messages) {
+        signatures.push(simulator.signMessage(msg));
+      }
+      
+      // Check nonces are sequential
+      for (let i = 0; i < signatures.length; i++) {
+        if (i > 0) {
+          expect(Number(signatures[i].nonce)).toBe(Number(signatures[i-1].nonce) + 1);
+        }
+      }
+    });
+
+    it("should allow verifying signatures in any order", () => {
+      const simulator = new SchnorrSimulator(FAIRWAY_SECRET_KEY);
+      
+      // Sign multiple different messages
+      const sig1 = simulator.signMessage("msg1");
+      const sig2 = simulator.signMessage("msg2");
+      const sig3 = simulator.signMessage("msg3");
+      
+      // Verify in reverse order (should all succeed)
+      expect(simulator.verifySignature("msg3", sig3)).toBe(true);
+      expect(simulator.verifySignature("msg1", sig1)).toBe(true);
+      expect(simulator.verifySignature("msg2", sig2)).toBe(true);
+    });
+
+    it("should prevent double-spending attack", () => {
+      const simulator = new SchnorrSimulator(FAIRWAY_SECRET_KEY);
+      const transferMessage = "transfer 1000 tokens to Bob";
+      
+      // User creates a transfer signature
+      const signature = simulator.signMessage(transferMessage);
+      
+      // First transfer succeeds
+      expect(simulator.verifySignature(transferMessage, signature)).toBe(true);
+      
+      // Attacker tries to replay the signature (should fail)
+      expect(simulator.verifySignature(transferMessage, signature)).toBe(false);
+      
+      // Multiple replay attempts all fail
+      for (let i = 0; i < 5; i++) {
+        expect(simulator.verifySignature(transferMessage, signature)).toBe(false);
+      }
+    });
+
+    it("should prevent replay of old signatures after many new ones", () => {
+      const simulator = new SchnorrSimulator(FAIRWAY_SECRET_KEY);
+      
+      // Create an old signature
+      const oldMessage = "old transaction";
+      const oldSignature = simulator.signMessage(oldMessage);
+      
+      // Verify it once
+      expect(simulator.verifySignature(oldMessage, oldSignature)).toBe(true);
+      
+      // Create and verify many new signatures
+      for (let i = 0; i < 50; i++) {
+        const sig = simulator.signMessage(`transaction ${i}`);
+        simulator.verifySignature(`transaction ${i}`, sig);
+      }
+      
+      // Try to replay the old signature (should fail - nonce already used)
+      expect(simulator.verifySignature(oldMessage, oldSignature)).toBe(false);
+    });
+
+    it("should ensure each signature gets a unique nonce", () => {
+      const simulator = new SchnorrSimulator(FAIRWAY_SECRET_KEY);
+      const nonces = new Set();
+      const numSignatures = 30;
+      
+      for (let i = 0; i < numSignatures; i++) {
+        const sig = simulator.signMessage(`message ${i}`);
+        
+        // Check this nonce hasn't been used before
+        expect(nonces.has(sig.nonce)).toBe(false);
+        
+        nonces.add(sig.nonce);
+      }
+      
+      // All nonces should be unique
+      expect(nonces.size).toBe(numSignatures);
+    });
+
+    it("should bind nonce to message content", () => {
+      const simulator = new SchnorrSimulator(FAIRWAY_SECRET_KEY);
+      const msg1 = "message A";
+      const msg2 = "message B";
+      
+      const sig1 = simulator.signMessage(msg1);
+      const sig2 = simulator.signMessage(msg2);
+      
+      // Different messages should have different nonces
+      expect(sig1.nonce).not.toBe(sig2.nonce);
+      
+      // Correct message verifies
+      expect(simulator.verifySignature(msg1, sig1)).toBe(true);
+      
+      // Wrong message fails (even though signature is valid)
+      expect(simulator.verifySignature(msg1, sig2)).toBe(false);
+      
+      // Second signature verifies with correct message
+      expect(simulator.verifySignature(msg2, sig2)).toBe(true);
+    });
+
+    it("should prevent replay of credential signatures", () => {
+      const simulator = new SchnorrSimulator(FAIRWAY_SECRET_KEY);
+      const credential = simulator.createCredentialSubject(
+        "user123",
+        "John",
+        "Doe",
+        "SSN-123-45-6789",
+        BigInt(Date.now())
+      );
+      
+      const signedCredential = simulator.signCredentialSubject(credential);
+      
+      // First verification succeeds
+      expect(simulator.verifySignedCredential(signedCredential)).toBe(true);
+      
+      // Replay should fail
+      expect(simulator.verifySignedCredential(signedCredential)).toBe(false);
+    });
+
+    it("should handle concurrent signing with unique nonces", () => {
+      const simulator = new SchnorrSimulator(FAIRWAY_SECRET_KEY);
+      const message = "concurrent transaction";
+      const signatures = [];
+      
+      // Sign the same message 10 times rapidly
+      for (let i = 0; i < 10; i++) {
+        signatures.push(simulator.signMessage(message));
+      }
+      
+      // Each signature should have a unique nonce
+      const nonces = signatures.map(sig => Number(sig.nonce));
+      const uniqueNonces = new Set(nonces);
+      expect(uniqueNonces.size).toBe(10);
+      
+      // All signatures should verify successfully (first time)
+      for (let i = 0; i < signatures.length; i++) {
+        expect(simulator.verifySignature(message, signatures[i])).toBe(true);
+      }
+      
+      // None should verify a second time
+      for (let i = 0; i < signatures.length; i++) {
+        expect(simulator.verifySignature(message, signatures[i])).toBe(false);
+      }
     });
   });
 });
