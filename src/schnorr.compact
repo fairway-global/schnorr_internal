@@ -1,11 +1,13 @@
 pragma language_version >= 0.16 && <= 0.18;
 import CompactStandardLibrary;
 
+export ledger used_nonces: Set<Uint<64>>;
 
 export struct Signature {
     pk: CurvePoint;
     R: CurvePoint;
     s: Field;
+    nonce: Uint<64>; 
 }
 
 struct Bytes96 {
@@ -17,31 +19,37 @@ struct Bytes96 {
 struct Bytes47 {
     b0: Bytes<15>;
     b1: Bytes<32>;
+}
 
+struct Bytes40 {
+    b0: Bytes<32>;
+    b1: Uint<64>;
 }
 
 export struct CredentialSubject {
-    id: Bytes<32>; // The id of the subject (midnight wallet own_public_key)
-    first_name: Bytes<32>; // The first name of the subject
-    last_name: Bytes<32>; // The last name of the subject
-    national_identifier: Bytes<32>; // The national identifier of the subject
-    birth_timestamp: Uint<64>; // The birth timestamp of the subject
+    id: Bytes<32>;
+    first_name: Bytes<32>;
+    last_name: Bytes<32>;
+    national_identifier: Bytes<32>;
+    birth_timestamp: Uint<64>;
 }
 
 export struct SignedCredentialSubject {
     subject: CredentialSubject;
     signature: Signature;
+    nonce: Uint<64>;   
 }
 
 export ledger fairway_pk: CurvePoint;
+export ledger next_nonce: Uint<64>;
 witness localSigningKey(): Bytes<32>;
 
 constructor() {
     assert(disclose(localSigningKey()) != default<Bytes<32>>, "Private key cannot be zero");
     fairway_pk = derive_pk(disclose(localSigningKey()));
+    next_nonce = 0;
 }
 
-// Hash the credential subject to a fixed-size representation
 export pure circuit subject_hash(credentialSubject: CredentialSubject): Bytes<32> {
     return persistentHash<CredentialSubject>(credentialSubject);
 }
@@ -50,12 +58,10 @@ circuit point_to_bytes(p: CurvePoint): Bytes<32> {
     return persistentHash<CurvePoint>(p);
 }
 
-// Derive public key from private key
 export pure circuit derive_pk(sk_bytes: Bytes<32>): CurvePoint {
     assert(sk_bytes != default<Bytes<32>>, "Private key cannot be zero");
     const sk_bytes15: Bytes<15> = slice<15>(sk_bytes, 0);
     const sk_field: Field = sk_bytes15 as Field;
-
     const pk: CurvePoint = ecMulGenerator(sk_field);
     return pk;
 }
@@ -69,8 +75,14 @@ export circuit sign(msg: Bytes<32>): Signature {
 
     const pk = derive_pk(sk_bytes);
 
-    // Use consistent 15-byte input for nonce generation RFC 6979 style
-    const nonce_input: Bytes47 = Bytes47 { b0: sk_bytes15, b1: msg };
+    const current_nonce = next_nonce;
+    next_nonce = current_nonce + 1 as Uint<64>;
+
+    const msg_with_nonce: Bytes40 = Bytes40 { b0: msg, b1: current_nonce };
+    const msg_hash: Bytes<32> = persistentHash<Bytes40>(msg_with_nonce);
+
+    // Deterministic k generation from (sk, msg_hash)
+    const nonce_input: Bytes47 = Bytes47 { b0: sk_bytes15, b1: msg_hash };
     const k_hash: Bytes<32> = persistentHash<Bytes47>(nonce_input);
     const k_bytes15: Bytes<15> = slice<15>(k_hash, 0);
     const k_field: Field = k_bytes15 as Field;
@@ -85,47 +97,54 @@ export circuit sign(msg: Bytes<32>): Signature {
     const c_bytes: Bytes96 = Bytes96 {
         b0: R_bytes,
         b1: pk_bytes,
-        b2: msg
+        b2: msg_hash  // Using hash that includes nonce
     };
 
     const c_hash: Bytes<32> = persistentHash<Bytes96>(c_bytes);
-
     const c_bytes15: Bytes<15> = slice<15>(c_hash, 0);
     const c_field: Field = c_bytes15 as Field;
     assert(c_field != 0, "Challenge cannot be zero");
  
-    // Compute signature: s = k + c * sk
     const s: Field = k_field + (c_field * sk_field);
 
-    return Signature { pk: pk, R: R, s: s };
+    // Return signature with the nonce it used
+    return Signature { pk: pk, R: R, s: s, nonce: current_nonce };
 }
 
 export circuit verify_signature(msg: Bytes<32>, signature: Signature): [] {
-        const {pk, R, s} = signature;
-        assert(pk == fairway_pk, "Public key mismatch");
-        // Compute challenge: c = H(R || pk || msg)
-        const R_bytes: Bytes<32> = point_to_bytes(R);
-        const pk_bytes: Bytes<32> = point_to_bytes(pk);
-        const c_bytes: Bytes96 = Bytes96 {
-            b0: R_bytes,
-            b1: pk_bytes,
-            b2: msg
-        };
-        
-        // Use the same approach as in sign() function
-        const c_hash: Bytes<32> = persistentHash<Bytes96>(c_bytes);
-        
-        const c_bytes15: Bytes<15> = slice<15>(c_hash, 0);
-        const c_field: Field = c_bytes15 as Field;
-        assert(c_field != 0, "Challenge cannot be zero");
+    const {pk, R, s, nonce} = disclose(signature);
+    assert(pk == fairway_pk, "Public key mismatch");
+    
+    //  Check this nonce hasn't been used before
+    assert(!used_nonces.member(nonce), "Nonce already used: replay attack detected");
+    
+    //  Recreate msg_hash with nonce from signature
+    const msg_with_nonce: Bytes40 = Bytes40 { b0: msg, b1: nonce };
+    const msg_hash: Bytes<32> = persistentHash<Bytes40>(msg_with_nonce);
+    
+    // Compute challenge with msg_hash
+    const R_bytes: Bytes<32> = point_to_bytes(R);
+    const pk_bytes: Bytes<32> = point_to_bytes(pk);
+    const c_bytes: Bytes96 = Bytes96 {
+        b0: R_bytes,
+        b1: pk_bytes,
+        b2: msg_hash  
+    };
+    
+    const c_hash: Bytes<32> = persistentHash<Bytes96>(c_bytes);
+    const c_bytes15: Bytes<15> = slice<15>(c_hash, 0);
+    const c_field: Field = c_bytes15 as Field;
+    assert(c_field != 0, "Challenge cannot be zero");
 
-        // Left-hand side: s * B
-        const lhs: CurvePoint = ecMulGenerator(s);
 
-        // Right-hand side: R + c * pk
-        const c_pk: CurvePoint = ecMul(pk, c_field);
-        const rhs: CurvePoint = ecAdd(R, c_pk);
+    // Left-hand side: s * B
+    const lhs: CurvePoint = ecMulGenerator(s);
 
-        // Enforce verification equation
-        assert(lhs == rhs, "Signature verification failed");
+    // Right-hand side: R + c * pk
+    const c_pk: CurvePoint = ecMul(pk, c_field);
+    const rhs: CurvePoint = ecAdd(R, c_pk);
+    assert(lhs == rhs, "Signature verification failed");
+    
+    // Mark nonce as used
+    used_nonces.insert(nonce);
 }
