@@ -12,8 +12,8 @@ export struct Signature {
 
 // Combined R, pk, and msg_hash for challenge derivation
 struct Bytes96 {
-    b0: Bytes<32>;
-    b1: Bytes<32>;
+    b0: Field;
+    b1: Field;
     b2: Bytes<32>;
 }
 
@@ -24,7 +24,7 @@ struct Bytes47 {
 }
 
 // Combined message and nonce for hashing
-struct Bytes40 {
+struct Bytes38 {
     b0: Bytes<32>;
     b1: Uint<64>;
 }
@@ -57,10 +57,6 @@ export pure circuit subject_hash(credentialSubject: CredentialSubject): Bytes<32
     return persistentHash<CredentialSubject>(credentialSubject);
 }
 
-circuit point_to_bytes(p: CurvePoint): Bytes<32> {
-    return persistentHash<CurvePoint>(p);
-}
-
 export pure circuit derive_pk(sk_bytes: Bytes<32>): CurvePoint {
     assert(sk_bytes != default<Bytes<32>>, "Private key cannot be zero");
     const sk_bytes15: Bytes<15> = slice<15>(sk_bytes, 0);
@@ -81,8 +77,8 @@ export circuit sign(msg: Bytes<32>): Signature {
     const current_nonce = next_nonce;
     next_nonce = current_nonce + 1 as Uint<64>;
 
-    const msg_with_nonce: Bytes40 = Bytes40 { b0: msg, b1: current_nonce };
-    const msg_hash: Bytes<32> = persistentHash<Bytes40>(msg_with_nonce);
+    const msg_with_nonce: Bytes38 = Bytes38 { b0: msg, b1: current_nonce };
+    const msg_hash: Bytes<32> = persistentHash<Bytes38>(msg_with_nonce);
 
     // Deterministic k generation from (sk, msg_hash)
     const nonce_input: Bytes47 = Bytes47 { b0: sk_bytes15, b1: msg_hash };
@@ -94,12 +90,10 @@ export circuit sign(msg: Bytes<32>): Signature {
     // Compute R = k * B
     const R: CurvePoint = ecMulGenerator(k_field);
 
-    // Compute challenge: c = H(R || pk || msg)
-    const R_bytes: Bytes<32> = point_to_bytes(R);
-    const pk_bytes: Bytes<32> = point_to_bytes(pk);
+    // Compute challenge: c = H(R || pk || msg_hash)
     const c_bytes: Bytes96 = Bytes96 {
-        b0: R_bytes,
-        b1: pk_bytes,
+        b0: R.x,
+        b1: pk.x,
         b2: msg_hash  // Using hash that includes nonce
     };
 
@@ -122,15 +116,13 @@ export circuit verify_signature(msg: Bytes<32>, signature: Signature): [] {
     assert(!used_nonces.member(nonce), "Nonce already used: replay attack detected");
     
     //  Recreate msg_hash with nonce from signature
-    const msg_with_nonce: Bytes40 = Bytes40 { b0: msg, b1: nonce };
-    const msg_hash: Bytes<32> = persistentHash<Bytes40>(msg_with_nonce);
+    const msg_with_nonce: Bytes38 = Bytes38 { b0: msg, b1: nonce };
+    const msg_hash: Bytes<32> = persistentHash<Bytes38>(msg_with_nonce);
     
     // Compute challenge with msg_hash
-    const R_bytes: Bytes<32> = point_to_bytes(R);
-    const pk_bytes: Bytes<32> = point_to_bytes(pk);
     const c_bytes: Bytes96 = Bytes96 {
-        b0: R_bytes,
-        b1: pk_bytes,
+        b0: R.x,
+        b1: pk.x,
         b2: msg_hash  
     };
     
