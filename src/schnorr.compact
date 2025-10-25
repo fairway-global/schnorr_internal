@@ -74,15 +74,18 @@ export circuit sign(msg: Bytes<32>): Signature {
 
     const pk = derive_pk(sk_bytes);
 
-    const current_nonce = next_nonce;
-    next_nonce = current_nonce + 1 as Uint<64>;
+    // Generate deterministic but unpredictable nonce from (sk + msg)
+    const nonce_seed: Bytes47 = Bytes47 { b0: sk_bytes15, b1: msg };
+    const nonce_hash: Bytes<32> = persistentHash<Bytes47>(nonce_seed);
+    const nonce_bytes: Bytes<8> = slice<8>(nonce_hash, 0);
+    const current_nonce: Uint<64> = nonce_bytes as Uint<64>;
 
     const msg_with_nonce: Bytes38 = Bytes38 { b0: msg, b1: current_nonce };
     const msg_hash: Bytes<32> = persistentHash<Bytes38>(msg_with_nonce);
 
     // Deterministic k generation from (sk, msg_hash)
-    const nonce_input: Bytes47 = Bytes47 { b0: sk_bytes15, b1: msg_hash };
-    const k_hash: Bytes<32> = persistentHash<Bytes47>(nonce_input);
+    const k_nonce_input: Bytes47 = Bytes47 { b0: sk_bytes15, b1: msg_hash };
+    const k_hash: Bytes<32> = persistentHash<Bytes47>(k_nonce_input);
     const k_bytes15: Bytes<15> = slice<15>(k_hash, 0);
     const k_field: Field = k_bytes15 as Field;
     assert(k_field != 0, "Nonce cannot be zero");
@@ -104,7 +107,7 @@ export circuit sign(msg: Bytes<32>): Signature {
  
     const s: Field = k_field + (c_field * sk_field);
 
-    // Return signature with the nonce it used
+    // Return signature with the deterministic nonce
     return Signature { pk: pk, R: R, s: s, nonce: current_nonce };
 }
 
