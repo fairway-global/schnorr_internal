@@ -15,7 +15,7 @@ import {
 } from "../managed/schnorr/contract/index.cjs";
 import { type SchnorrPrivateState, witnesses } from "../witnesses.js";
 
-import { FAIRWAY_SECRET_KEY, hexToBytes, randomBytes } from "./utils.js";
+import { FAIRWAY_SECRET_KEY, randomBytes } from "./utils.js";
 
 // Fairway's company secret key - this is the ONLY key that can create valid signatures
 
@@ -39,7 +39,10 @@ export class SchnorrSimulator {
         currentContractState,
         currentZswapLocalState,
       } = SchnorrSimulator.sharedContract.initialState(
-        constructorContext({ localSigningKey: FAIRWAY_SECRET_KEY }, "0".repeat(64)),
+        constructorContext({ 
+          localSigningKey: FAIRWAY_SECRET_KEY,
+          signingNonce: randomBytes(32)
+        }, "0".repeat(64)),
       );
       
       SchnorrSimulator.sharedLedgerState = currentContractState;
@@ -52,7 +55,10 @@ export class SchnorrSimulator {
     // Create instance-specific context with shared ledger state
     const localSigningKey = secretKey;
     this.circuitContext = {
-      currentPrivateState: { localSigningKey },
+      currentPrivateState: { 
+        localSigningKey,
+        signingNonce: randomBytes(32) // Fresh random nonce for each instance
+      },
       currentZswapLocalState: SchnorrSimulator.sharedZswapState,
       originalState: SchnorrSimulator.sharedLedgerState,
       transactionContext: new QueryContext(
@@ -81,8 +87,19 @@ export class SchnorrSimulator {
 
   public signMessage(message: string): Signature {
     const messageBytes = this.stringToBytes32(message);
+    
+    // Generate fresh random nonce for each signing operation
+    const freshNonce = randomBytes(32);
+    const contextWithFreshNonce = {
+      ...this.circuitContext,
+      currentPrivateState: {
+        ...this.circuitContext.currentPrivateState,
+        signingNonce: freshNonce // New random nonce each time!
+      }
+    };
+    
     const result = this.contract.circuits.sign(
-      this.circuitContext,
+      contextWithFreshNonce,
       messageBytes,
     );
     
@@ -147,12 +164,18 @@ export class SchnorrSimulator {
   public signCredentialSubject(credential: CredentialSubject): SignedCredentialSubject {
     const credentialHash = this.hashCredentialSubject(credential);
     
-    // Use signMessage to get proper state updates
-    const signature = this.signMessage(Buffer.from(credentialHash).toString('hex').slice(0, 64).padEnd(64, '0'));
+    // Generate fresh random nonce for each signing operation
+    const freshNonce = randomBytes(32);
+    const contextWithFreshNonce = {
+      ...this.circuitContext,
+      currentPrivateState: {
+        ...this.circuitContext.currentPrivateState,
+        signingNonce: freshNonce
+      }
+    };
     
-    // Actually, let's call the circuit directly but update state properly
     const result = this.contract.circuits.sign(
-      this.circuitContext,
+      contextWithFreshNonce,
       credentialHash
     );
     
@@ -166,7 +189,7 @@ export class SchnorrSimulator {
     return {
       subject: credential,
       signature: result.result,
-      nonce: result.result.nonce,
+      nonce: result.result.nonce as any, // The nonce from signature (Bytes<32>)
     };
   }
 

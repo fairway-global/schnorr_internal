@@ -727,8 +727,13 @@ describe("Schnorr Signature Contract", () => {
       }
       
       // Each signature should have a unique nonce
-      const nonces = signatures.map(sig => Number(sig.nonce));
-      const uniqueNonces = new Set(nonces);
+      const nonces = signatures.map(sig => sig.nonce);
+      console.log("Raw nonces:", nonces.map(n => Array.from(n).slice(0, 8))); // First 8 bytes of each nonce
+      
+      const nonceHashes = signatures.map(sig => Array.from(sig.nonce).map(b => b.toString(16).padStart(2, '0')).join('').slice(0, 16));
+      console.log("Nonce hashes (first 16 hex chars):", nonceHashes);
+      
+      const uniqueNonces = new Set(nonceHashes);
       expect(uniqueNonces.size).toBe(10);
       
       // All signatures should verify successfully (first time)

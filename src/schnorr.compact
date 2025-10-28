@@ -1,13 +1,13 @@
 pragma language_version >= 0.16 && <= 0.18;
 import CompactStandardLibrary;
 
-export ledger used_nonces: Set<Uint<64>>;
+export ledger used_nonces: Set<Bytes<32>>;
 
 export struct Signature {
     pk: CurvePoint;
     R: CurvePoint;
     s: Field;
-    nonce: Uint<64>; 
+    nonce: Bytes<32>; 
 }
 
 // Combined R, pk, and msg_hash for challenge derivation
@@ -18,15 +18,15 @@ struct Bytes96 {
 }
 
 // Combined private key and message hash for nonce derivation
-struct Bytes47 {
+struct NonceInput {
     b0: Bytes<15>;
     b1: Bytes<32>;
 }
 
 // Combined message and nonce for hashing
-struct Bytes38 {
+struct MessageWithNonce {
     b0: Bytes<32>;
-    b1: Uint<64>;
+    b1: Bytes<32>;
 }
 
 export struct CredentialSubject {
@@ -40,17 +40,16 @@ export struct CredentialSubject {
 export struct SignedCredentialSubject {
     subject: CredentialSubject;
     signature: Signature;
-    nonce: Uint<64>;   
+    nonce: Bytes<32>;   
 }
 
 export ledger fairway_pk: CurvePoint;
-export ledger next_nonce: Uint<64>;
 witness localSigningKey(): Bytes<32>;
+witness signingNonce(): Bytes<32>;
 
 constructor() {
     assert(disclose(localSigningKey()) != default<Bytes<32>>, "Private key cannot be zero");
     fairway_pk = derive_pk(disclose(localSigningKey()));
-    next_nonce = 0;
 }
 
 export pure circuit subject_hash(credentialSubject: CredentialSubject): Bytes<32> {
@@ -74,18 +73,15 @@ export circuit sign(msg: Bytes<32>): Signature {
 
     const pk = derive_pk(sk_bytes);
 
-    // Generate deterministic but unpredictable nonce from (sk + msg)
-    const nonce_seed: Bytes47 = Bytes47 { b0: sk_bytes15, b1: msg };
-    const nonce_hash: Bytes<32> = persistentHash<Bytes47>(nonce_seed);
-    const nonce_bytes: Bytes<8> = slice<8>(nonce_hash, 0);
-    const current_nonce: Uint<64> = nonce_bytes as Uint<64>;
+    const current_nonce: Bytes<32> = disclose(signingNonce());
+  
 
-    const msg_with_nonce: Bytes38 = Bytes38 { b0: msg, b1: current_nonce };
-    const msg_hash: Bytes<32> = persistentHash<Bytes38>(msg_with_nonce);
+    const msg_with_nonce: MessageWithNonce = MessageWithNonce{ b0: msg, b1: current_nonce };
+    const msg_hash: Bytes<32> = persistentHash<MessageWithNonce>(msg_with_nonce);
 
     // Deterministic k generation from (sk, msg_hash)
-    const k_nonce_input: Bytes47 = Bytes47 { b0: sk_bytes15, b1: msg_hash };
-    const k_hash: Bytes<32> = persistentHash<Bytes47>(k_nonce_input);
+    const k_nonce_input: NonceInput = NonceInput { b0: sk_bytes15, b1: msg_hash };
+    const k_hash: Bytes<32> = persistentHash<NonceInput>(k_nonce_input);
     const k_bytes15: Bytes<15> = slice<15>(k_hash, 0);
     const k_field: Field = k_bytes15 as Field;
     assert(k_field != 0, "Nonce cannot be zero");
@@ -119,8 +115,8 @@ export circuit verify_signature(msg: Bytes<32>, signature: Signature): [] {
     assert(!used_nonces.member(nonce), "Nonce already used: replay attack detected");
     
     //  Recreate msg_hash with nonce from signature
-    const msg_with_nonce: Bytes38 = Bytes38 { b0: msg, b1: nonce };
-    const msg_hash: Bytes<32> = persistentHash<Bytes38>(msg_with_nonce);
+    const msg_with_nonce: MessageWithNonce = MessageWithNonce{ b0: msg, b1: nonce };
+    const msg_hash: Bytes<32> = persistentHash<MessageWithNonce>(msg_with_nonce);
     
     // Compute challenge with msg_hash
     const c_bytes: Bytes96 = Bytes96 {
