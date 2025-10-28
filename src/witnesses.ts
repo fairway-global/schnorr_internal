@@ -31,18 +31,7 @@ export const witnesses = {
     SchnorrPrivateState,
     Uint8Array,
   ] => {
-    // Generate a random bigint and convert to 32-byte array
-    const randomBigInt = BigInt('0x' + Array.from(randomBytes(32))
-      .map(b => b.toString(16).padStart(2, '0'))
-      .join(''));
-    
-    // Convert bigint back to 32-byte Uint8Array
-    const hex = randomBigInt.toString(16).padStart(64, '0');
-    const generatedNonce = new Uint8Array(32);
-    for (let i = 0; i < 32; i++) {
-      generatedNonce[i] = parseInt(hex.substring(i * 2, i * 2 + 2), 16);
-    }
-    
+    const generatedNonce = randomBytes(32);    
     return [privateState, generatedNonce];
   },
 };
