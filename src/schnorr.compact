@@ -11,7 +11,7 @@ export struct Signature {
 }
 
 // Combined R, pk, and msg_hash for challenge derivation
-struct Bytes96 {
+struct ChallengeInput {
     b0: Field;
     b1: Field;
     b2: Bytes<32>;
@@ -90,13 +90,13 @@ export circuit sign(msg: Bytes<32>): Signature {
     const R: CurvePoint = ecMulGenerator(k_field);
 
     // Compute challenge: c = H(R || pk || msg_hash)
-    const c_bytes: Bytes96 = Bytes96 {
+    const c_bytes: ChallengeInput = ChallengeInput {
         b0: R.x,
         b1: pk.x,
         b2: msg_hash  // Using hash that includes nonce
     };
 
-    const c_hash: Bytes<32> = persistentHash<Bytes96>(c_bytes);
+    const c_hash: Bytes<32> = persistentHash<ChallengeInput>(c_bytes);
     const c_bytes15: Bytes<15> = slice<15>(c_hash, 0);
     const c_field: Field = c_bytes15 as Field;
     assert(c_field != 0, "Challenge cannot be zero");
@@ -119,13 +119,13 @@ export circuit verify_signature(msg: Bytes<32>, signature: Signature): [] {
     const msg_hash: Bytes<32> = persistentHash<MessageWithNonce>(msg_with_nonce);
     
     // Compute challenge with msg_hash
-    const c_bytes: Bytes96 = Bytes96 {
+    const c_bytes: ChallengeInput = ChallengeInput {
         b0: R.x,
         b1: pk.x,
         b2: msg_hash  
     };
     
-    const c_hash: Bytes<32> = persistentHash<Bytes96>(c_bytes);
+    const c_hash: Bytes<32> = persistentHash<ChallengeInput>(c_bytes);
     const c_bytes15: Bytes<15> = slice<15>(c_hash, 0);
     const c_field: Field = c_bytes15 as Field;
     assert(c_field != 0, "Challenge cannot be zero");

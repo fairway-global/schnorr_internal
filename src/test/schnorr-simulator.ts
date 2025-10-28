@@ -132,7 +132,6 @@ export class SchnorrSimulator {
       
       return true;
     } catch (error) {
-      console.error("Verification error:", error);
       return false;
     }
   }

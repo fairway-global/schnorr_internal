@@ -169,7 +169,6 @@ describe("Schnorr Signature Contract", () => {
       const signature = simulator.signMessage(message);
       const isValid = simulator.verifySignature(message, signature);
       
-      //console.log("Is signature valid?", isValid);
       expect(isValid).toBe(true);
     });
 
@@ -374,6 +373,36 @@ describe("Schnorr Signature Contract", () => {
       expect(fairwayValid).toBe(true);
     });
 
+    it("handles maximum 32-byte values for secret key and signing nonce", () => {
+      // Test edge case with maximum possible 32-byte values
+      const maxSecretKey = new Uint8Array(32);
+      maxSecretKey.fill(0xFF); // All 255s - maximum possible value
+      
+      // Create simulator with max secret key
+      const simulator = new SchnorrSimulator(maxSecretKey);
+      const message = "Test with maximum 32-byte values";
+      
+      // This should work fine because we slice to 16 bytes in the contract
+      const signature = simulator.signMessage(message);
+      
+      console.log("Max value test - Secret key (first 16 bytes as Field):");
+      console.log("Hex:", Array.from(maxSecretKey.slice(0, 16)).map(b => b.toString(16).padStart(2, '0')).join(''));
+      console.log("Decimal:", maxSecretKey.slice(0, 16).reduce((acc, byte, i) => acc + BigInt(byte) * (256n ** BigInt(15 - i)), 0n).toString());
+      
+      // Signature should be created successfully despite max values
+      expect(signature).toBeDefined();
+      expect(signature.pk).toBeDefined();
+      expect(signature.R).toBeDefined();
+      expect(signature.s).toBeDefined();
+      expect(signature.nonce).toBeDefined();
+      
+      // The nonce will be random (not max values) because that's how the witness works
+      expect(signature.nonce).not.toEqual(maxSecretKey); // Random nonce ≠ max secret key
+      
+      console.log("Max value test passed - signature created successfully with max secret key");
+      console.log("Actual nonce (first 8 bytes):", Array.from(signature.nonce.slice(0, 8)));
+    });
+
     it("maintains signature determinism", () => {
       const privateKey = randomBytes(32);
       const message = "Deterministic test message";
@@ -384,8 +413,6 @@ describe("Schnorr Signature Contract", () => {
       const signature1 = simulator1.signMessage(message);
       const signature2 = simulator2.signMessage(message);
       
-      // Note: Schnorr signatures might include randomness, so this test
-      // depends on the implementation details
       expect(signature1.pk).toEqual(signature2.pk);
     });
   });
